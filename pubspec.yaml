@@ -9,11 +9,10 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  file_picker: ^6.1.1 # Tu peux prendre la dernière version stable
+  flutter_tts: ^3.8.0
   speech_to_text: ^6.3.0
-  flutter_tts: ^3.6.3
-  file_picker: ^6.0.0
-  cupertino_icons: ^1.0.2
-
+  share_plus: ^7.2.1
 
 dev_dependencies:
   flutter_test:
