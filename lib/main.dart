@@ -2,25 +2,27 @@ import 'package:flutter/material.dart';
 import 'screens/stt_screen.dart';
 import 'screens/tts_screen.dart';
 import 'screens/files_screen.dart';
-import 'widgets/custom_drawer.dart';
 
 void main() {
-  runApp(const MyApp());
+  runApp(const AudioTextConverterApp());
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class AudioTextConverterApp extends StatelessWidget {
+  const AudioTextConverterApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'AudioText Converter',
-      theme: ThemeData(primarySwatch: Colors.deepPurple),
-      initialRoute: '/stt',
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+        useMaterial3: true,
+      ),
+      initialRoute: '/',
       routes: {
-        '/stt': (context) => const STTScreen(),
-        '/tts': (context) => const TTSScreen(),
-        '/files': (context) => const FilesScreen(),
+        '/': (_) => const STTScreen(),
+        '/tts': (_) => const TTSScreen(),
+        '/files': (_) => const FilesScreen(),
       },
     );
   }

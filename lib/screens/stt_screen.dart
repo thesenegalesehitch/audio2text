@@ -1,9 +1,10 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:file_picker/file_picker.dart';
+import 'dart:html' as html; // Pour le Web
 
 class STTScreen extends StatefulWidget {
   const STTScreen({super.key});
@@ -21,6 +22,7 @@ class _STTScreenState extends State<STTScreen> {
   String _detectedLocale = '';
   bool _autoDetect = true;
   bool _loadingLocales = true;
+  String? _currentLocaleId;
 
   @override
   void initState() {
@@ -31,16 +33,16 @@ class _STTScreenState extends State<STTScreen> {
   Future<void> _initSpeech() async {
     bool available = await _speech.initialize(
       onStatus: (status) {
-        if (status == 'done') {
+        if (status == 'done' || status == 'notListening') {
           setState(() {
             _isListening = false;
           });
-          _saveTextToFile(auto: true);
+          // Plus de sauvegarde automatique ici
         }
       },
       onError: (error) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur STT: ${error.errorMsg}')),
+          SnackBar(content: Text('Erreur STT : ${error.errorMsg}')),
         );
       },
     );
@@ -48,9 +50,11 @@ class _STTScreenState extends State<STTScreen> {
     if (available) {
       try {
         final locales = await _speech.locales();
+        final systemLocale = await _speech.systemLocale();
+
         setState(() {
           _locales = locales;
-          _selectedLocaleId = _locales.isNotEmpty ? _locales.first.localeId : null;
+          _selectedLocaleId = systemLocale?.localeId ?? (locales.isNotEmpty ? locales.first.localeId : null);
           _loadingLocales = false;
         });
       } catch (e) {
@@ -62,7 +66,7 @@ class _STTScreenState extends State<STTScreen> {
     } else {
       setState(() => _loadingLocales = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Speech-to-Text non disponible ou refusé")),
+        const SnackBar(content: Text('STT non disponible ou permissions refusées')),
       );
     }
   }
@@ -71,56 +75,97 @@ class _STTScreenState extends State<STTScreen> {
     if (_isListening) {
       await _speech.stop();
       setState(() => _isListening = false);
-      await _saveTextToFile(auto: true);
+      // Plus de sauvegarde automatique ici
     } else {
+      setState(() {
+        _text = '';
+        _detectedLocale = '';
+      });
+
+      String? localeToUse;
+      if (_autoDetect) {
+        final sysLocale = await _speech.systemLocale();
+        localeToUse = sysLocale?.localeId;
+        _currentLocaleId = localeToUse;
+      } else {
+        localeToUse = _selectedLocaleId;
+        _currentLocaleId = localeToUse;
+      }
+
       await _speech.listen(
         onResult: (result) {
           setState(() {
             _text = result.recognizedWords;
-            if (_autoDetect) {
-              _speech.systemLocale().then((locale) {
-                setState(() {
-                  _detectedLocale = locale?.localeId ?? '';
-                });
-              });
+            if (_autoDetect && _currentLocaleId != null) {
+              _detectedLocale = _currentLocaleId!;
             }
           });
         },
-        localeId: _autoDetect ? null : _selectedLocaleId,
+        localeId: localeToUse,
         listenMode: stt.ListenMode.dictation,
       );
-      setState(() {
-        _isListening = true;
-        _detectedLocale = '';
-      });
+
+      setState(() => _isListening = true);
     }
   }
 
   Future<void> _saveTextToFile({bool auto = false}) async {
-    final dir = await getApplicationDocumentsDirectory();
-    final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-');
-    final file = File('${dir.path}/transcription_$timestamp.txt');
-    await file.writeAsString(_text);
-    if (!auto) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Texte sauvegardé : ${file.path}')),
-      );
+    if (_text.trim().isEmpty) {
+      if (!auto) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Aucun texte à sauvegarder')),
+        );
+      }
+      return;
     }
-  }
 
-  Future<void> _importAudioFile() async {
-    final result = await FilePicker.platform.pickFiles(type: FileType.audio);
-    if (result != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Importation audio détectée. STT sur fichier : backend requis.')),
-      );
+    final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-');
+    final filename = 'transcription_$timestamp.txt';
+
+    if (kIsWeb) {
+      // Gestion web : téléchargement
+      final blob = html.Blob([_text]);
+      final url = html.Url.createObjectUrlFromBlob(blob);
+      final anchor = html.AnchorElement(href: url)
+        ..setAttribute("download", filename)
+        ..click();
+      html.Url.revokeObjectUrl(url);
+
+      if (!auto) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Texte prêt à être téléchargé')),
+        );
+      }
+    } else {
+      // Gestion mobile/desktop : sauvegarde fichier
+      final dir = await getApplicationDocumentsDirectory();
+      final file = File('${dir.path}/$filename');
+      await file.writeAsString(_text);
+
+      if (!auto) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Texte sauvegardé : ${file.path}')),
+        );
+        Navigator.pushNamed(context, '/files');
+      }
     }
   }
 
   void _shareText() {
-    if (_text.isNotEmpty) {
+    if (_text.trim().isNotEmpty) {
       Share.share(_text);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Aucun texte à partager')),
+      );
     }
+  }
+
+  void _clearText() {
+    setState(() {
+      _text = '';
+      _detectedLocale = '';
+    });
   }
 
   @override
@@ -170,7 +215,7 @@ class _STTScreenState extends State<STTScreen> {
                     });
                   },
                 ),
-                const Text("Détection automatique de la langue"),
+                const Expanded(child: Text("Détection automatique de la langue")),
               ],
             ),
             if (!_autoDetect)
@@ -182,7 +227,7 @@ class _STTScreenState extends State<STTScreen> {
                       items: _locales.map((locale) {
                         return DropdownMenuItem(
                           value: locale.localeId,
-                          child: Text(locale.name),
+                          child: Text('${locale.name} (${locale.localeId})'),
                         );
                       }).toList(),
                       onChanged: (val) {
@@ -194,7 +239,7 @@ class _STTScreenState extends State<STTScreen> {
             if (_detectedLocale.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(top: 8),
-                child: Text('Langue détectée : $_detectedLocale',
+                child: Text('Langue utilisée : $_detectedLocale',
                     style: const TextStyle(fontStyle: FontStyle.italic)),
               ),
             const SizedBox(height: 10),
@@ -228,7 +273,7 @@ class _STTScreenState extends State<STTScreen> {
               children: [
                 Expanded(
                   child: ElevatedButton.icon(
-                    onPressed: _text.isNotEmpty ? _saveTextToFile : null,
+                    onPressed: _text.trim().isNotEmpty ? () => _saveTextToFile(auto: false) : null,
                     icon: const Icon(Icons.save),
                     label: const Text('Sauvegarder'),
                   ),
@@ -236,21 +281,24 @@ class _STTScreenState extends State<STTScreen> {
                 const SizedBox(width: 10),
                 Expanded(
                   child: ElevatedButton.icon(
-                    onPressed: _importAudioFile,
-                    icon: const Icon(Icons.upload_file),
-                    label: const Text('Importer Audio'),
+                    onPressed: _text.trim().isNotEmpty ? _shareText : null,
+                    icon: const Icon(Icons.share),
+                    label: const Text('Partager'),
                   ),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: ElevatedButton.icon(
-                    onPressed: _text.isNotEmpty ? _shareText : null,
-                    icon: const Icon(Icons.share),
-                    label: const Text('Partager'),
+                    onPressed: _clearText,
+                    icon: const Icon(Icons.delete),
+                    label: const Text('Effacer'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.grey,
+                    ),
                   ),
                 ),
               ],
-            ),
+            )
           ],
         ),
       ),

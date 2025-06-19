@@ -1,37 +1,36 @@
 import 'package:flutter_tts/flutter_tts.dart';
 
 class TTSService {
-  final FlutterTts _tts = FlutterTts();
+  final FlutterTts _flutterTts = FlutterTts();
 
-  Future<void> speak(String text) async {
-    await _tts.speak(text);
-  }
-
-  Future<void> stop() async {
-    await _tts.stop();
-  }
-
-  Future<void> setLanguage(String lang) async {
-    await _tts.setLanguage(lang);
-  }
-
-  Future<void> setVoice(Map<String, String> voice) async {
-    await _tts.setVoice(voice);
-  }
-
-  Future<void> setSpeechRate(double rate) async {
-    await _tts.setSpeechRate(rate);
-  }
-
-  Future<void> setPitch(double pitch) async {
-    await _tts.setPitch(pitch);
-  }
-
+  /// Récupère la liste des voix disponibles
   Future<List<dynamic>> getVoices() async {
-    return await _tts.getVoices;
+    return await _flutterTts.getVoices;
   }
 
-  Future<List<String>> getLanguages() async {
-    return await _tts.getLanguages;
+  /// Configure la voix à utiliser pour la lecture
+  Future<void> setVoice(Map<String, dynamic> voice) async {
+    // Conversion en Map<String, String> pour correspondre au type attendu
+    final Map<String, String> stringVoice = voice.map(
+      (key, value) => MapEntry(key.toString(), value.toString()),
+    );
+    await _flutterTts.setVoice(stringVoice);
+  }
+
+  /// Lance la lecture du texte
+  Future<void> speak(String text) async {
+    if (text.trim().isNotEmpty) {
+      await _flutterTts.speak(text);
+    }
+  }
+
+  /// Arrête la lecture en cours
+  Future<void> stop() async {
+    await _flutterTts.stop();
+  }
+
+  /// Définit un gestionnaire de fin de lecture
+  void setCompletionHandler(Function() onComplete) {
+    _flutterTts.setCompletionHandler(onComplete);
   }
 }

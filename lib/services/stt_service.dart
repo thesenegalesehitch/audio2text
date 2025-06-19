@@ -1,30 +1,62 @@
-import 'package:speech_to_text/speech_to_text.dart' as stt;
+import 'package:speech_to_text/speech_to_text.dart';
 
 class STTService {
-  final stt.SpeechToText _speech = stt.SpeechToText();
+  final SpeechToText _speech = SpeechToText();
+  bool _initialized = false;
 
-  Future<String> listen(String locale) async {
-    String resultText = '';
-    bool available = await _speech.initialize();
-    if (available) {
-      await _speech.listen(
-        onResult: (result) {
-          resultText = result.recognizedWords;
-        },
-        localeId: locale,
-      );
-      await Future.delayed(const Duration(seconds: 5));
+  /// Initialise le STT si pas déjà fait
+  Future<bool> initialize({
+    void Function(String status)? onStatus,
+    void Function(String error)? onError,
+  }) async {
+    if (_initialized) return true;
+
+    final available = await _speech.initialize(
+      onStatus: onStatus,
+      onError: (error) {
+        // Le paramètre error.errorMsg existe
+        onError?.call(error.errorMsg);
+      },
+    );
+
+    _initialized = available;
+    return available;
+  }
+
+  /// Récupère la liste des langues supportées
+  Future<List<LocaleName>> getLocales() async {
+    if (!_initialized) {
+      await initialize();
+    }
+    return await _speech.locales();
+  }
+
+  /// Lance l'écoute
+  Future<void> listen({
+    required Function(String recognizedText) onResult,
+    String? localeId,
+  }) async {
+    if (!_initialized) {
+      final success = await initialize();
+      if (!success) {
+        throw Exception("STT non disponible");
+      }
+    }
+
+    await _speech.listen(
+      onResult: (result) => onResult(result.recognizedWords),
+      localeId: localeId,
+      listenMode: ListenMode.dictation,
+    );
+  }
+
+  /// Arrête l'écoute
+  Future<void> stop() async {
+    if (_initialized && _speech.isListening) {
       await _speech.stop();
     }
-    return resultText;
   }
 
-  Future<void> stop() async {
-    await _speech.stop();
-  }
-
-  Future<List<stt.LocaleName>> getLocales() async {
-    await _speech.initialize();
-    return _speech.locales();
-  }
+  /// Vérifie si l'écoute est active
+  bool get isListening => _speech.isListening;
 }
